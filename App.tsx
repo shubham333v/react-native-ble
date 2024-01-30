@@ -272,7 +272,7 @@ const styles_x = StyleSheet.create({
   /////////#####################styles
 return (<SafeAreaView style={[backgroundStyle, styles.mainBody]}>
   <View style={styles.containerMain}>
-     <Text style={styles_x.txt} onPress={(a)=>connect("58:CF:79:26:24:3E")}>CONNECT</Text>
+     <Text style={styles_x.txt} onPress={(a)=>connect(conDev.id)}>CONNECT</Text>
      <Text style={styles_x.txt}></Text>
      <Text style={styles_x.txt} onPress={(a)=>notify(conDev.id)}>NOTIFY</Text>
      <Text style={styles_x.txt}></Text>
