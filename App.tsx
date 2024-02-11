@@ -1,24 +1,22 @@
 import React from "react";
 import type {PropsWithChildren} from 'react';
 import { useState, useEffect } from 'react';
+import { stylesGlob,stylesACtPanel,stylesConnPanel,stylesDevItems,stylesRxTxPan} from "./style";
+import {CButton}from"./custoComp";
 import {
   SafeAreaView,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
   NativeModules,
   NativeEventEmitter,
   Platform,
   PermissionsAndroid,
-  Dimensions,
-  TouchableOpacity,
   FlatList,
   TouchableHighlight,
-  Pressable,
-  TouchableWithoutFeedback,
+  TextInput,
+  
 } from 'react-native';
 
 import BleManager, {
@@ -30,6 +28,9 @@ import BleManager, {
   Peripheral,
 } from 'react-native-ble-manager';
 import { FloatingAction } from 'react-native-floating-action';
+import ToolbarAndroid from '@react-native-community/toolbar-android'
+
+import Icon from 'react-native-vector-icons/AntDesign';
 
 const BleManagerModule = NativeModules.BleManager;
 const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
@@ -51,30 +52,51 @@ import {
   LearnMoreLinks,
   ReloadInstructions,
 } from 'react-native/Libraries/NewAppScreen';
+//import { color } from "native-base/lib/typescript/theme/styled-system";
 
-const SECONDS_TO_SCAN_FOR = 10;
+const SCAN_INTERV = 10;
 const SERVICE_UUIDS: string[] = [];
-const ALLOW_DUPLICATES = true;
+const ALLOW_DUPLICATES = false;
 
 const App = () => {
+/////////////////////////////////////////////////////////////////
+///////////////      VARIABLES
+/////////////////////////////////////////////////////////////////
   const [value, setvalue] = useState("am i");
-  const hellod = (a:string) => {setvalue(a); };
+  const [deviceName,setDevName]=useState("UNCONNECTED");
   const [isScanning, setIsScanning] = useState(false);
-  const [peripherals, setPeripherals] = useState(
-    new Map<Peripheral['id'], Peripheral>(),
-  );
+  const [peripherals, setPeripherals] = useState(new Map<Peripheral['id'], Peripheral>() );
+  //const [devices,setdevs]=useState([]);
   var devices=[{}];
-  var actions =[];
+  const backgroundStyle = Colors.darker;
+  const [sensHeight,setsensHeight]=useState("-");
+  const dTyp={height:0x31,oxi:0x50,cust:0x00};
+  var dataState=dTyp.height;
+ // var devices=[{}];
 
+/////////////////////////////////////////////////////////////////
+///////////////       FUNCTIONS
+/////////////////////////////////////////////////////////////////
+function byte2string(a:Array<string>){let s="";for(let i=0;i<a.length;++i){s+=(String.fromCharCode(a[i])); };return s; }
+
+function string2byte(a:string){let b=[];for(var i=0;i<a.length;++i){let c= a.charCodeAt(i);b=b.concat([c]);return } return b;}
 /////////////////////////////////////////////////////////////////
 ///////////////       DEVICES
 /////////////////////////////////////////////////////////////////
-const addDev=(nme:string,did:string)=>{let isin=false;
-  for(let i=0;i<devices.length;i++)if(devices[i].id==did)isin=true;
-  if(!isin)devices.push({name:nme,id:did}); }
-const clrDev=()=>{devices=[]; }
+const addDev=(perif:Peripheral)=>{let isin=false;
+  perif.name=perif.name||"NO NAME";
+  //setPeripherals(map =>{return new Map(map.set(perif.id,perif)); });
+  for(let i=0;i<devices.length;i++){if(devices[i].id==perif.id)isin=true; }
+  if(!isin){devices.push({name:perif.name,id:perif.id});
+  console.log('[NEW_DEV]:',{name:perif.name,id:perif.id});
+ setPeripherals(map =>{return new Map(map.set(perif.id,perif)); }); 
+} }
+
+const clrDev=()=>{devices=[];setPeripherals(new Map<Peripheral['id'], Peripheral>()); }
+
+const rmvDev=(did:string)=>{for(let i=0;i<devices.length;i++)if(devices[i].id==did)devices.filter(item=>item.id!==value); }
 /////////////////////////////////////////////////////////////////
-///////////////       HANDLE RQ
+///////////////       HANDLERQ
 /////////////////////////////////////////////////////////////////
 var handleLocReq = () => {
     if (Platform.OS === 'android' && Platform.Version >= 31) {
@@ -84,11 +106,11 @@ var handleLocReq = () => {
       ]).then(result => {
         if (result) {
           console.debug(
-            '[handleAndroidPermissions] User accepts runtime permissions android 12+',
+            '[HANDLERQ]: User accepts runtime permissions android 12+',
           );return true;
         } else {
           console.error(
-            '[handleAndroidPermissions] User refuses runtime permissions android 12+',
+            '[HANDLERQ]:error: User refuses runtime permissions android 12+',
           );return false;
         }
       });
@@ -98,7 +120,7 @@ var handleLocReq = () => {
       ).then(checkResult => {
         if (checkResult) {
           console.debug(
-            '[handleAndroidPermissions] runtime permission Android <12 already OK',
+            '[HANDLERQ]: runtime permission Android <12 already OK',
           );return true;
         } else {
           PermissionsAndroid.request(
@@ -106,11 +128,11 @@ var handleLocReq = () => {
           ).then(requestResult => {
             if (requestResult) {
               console.debug(
-                '[handleAndroidPermissions] User accepts runtime permission android <12**',
+                '[HANDLERQ]:error: User accepts runtime permission android <12**',
               );return true;
             } else {
               console.error(
-                '[handleAndroidPermissions] User refuses runtime permission android <12*',
+                '[HANDLERQ]:error: User refuses runtime permission android <12*',
               );return false;
             }
           });
@@ -120,227 +142,137 @@ var handleLocReq = () => {
   };
 
 ////////////////////////////////////////////////////
-//////
+//////  LISTENERDISC
 ////////////////////////////////////////////////////
-const handleDiscoverPeripheral = (peripheral: Peripheral) => {
- if(peripheral.advertising.isConnectable){console.log('newBLEperipheral',actions.length, peripheral);
-  let nme=peripheral.name||'NO NAME';let id=peripheral.id;
-  //let act={text:nme,name:nme};
- // actions[actions.length]=act; }
- addDev(nme,id);
-}
- 
-//setPeripherals(map => {return new Map(map.set(peripheral.id, peripheral)); });
-
-  console.log('perifData',devices);
-};  
-
-
+/*const handleDiscoverPeripheral=(peripheral:Peripheral)=>{if(peripheral.advertising.isConnectable){let nme=peripheral.name||'NO NAME';let id=peripheral.id;addDev(peripheral); } };  
 
 const handleStopScan=()=>{setIsScanning(false);console.log('[handleStopScan] scan is stopped.'); };
 
-
 const handleDisconnectedPeripheral=(event: BleDisconnectPeripheralEvent)=>{console.log(`[handleDisconnectedPeripheral][${event.peripheral}] disconnected.`);
- setPeripherals(map=>{let p=map.get(event.peripheral);if(p){p.connected=false;return new Map(map.set(event.peripheral,p)); };return map; }); };
+setDevName("UNCONNECTED");clrDev(); };
 
+const handleConnectPeripheral=(event:any)=>{setDevName(event.peripheral);console.log(`[CONNECTEDDEV]:[${event.peripheral}] connected.`); };
 
-const handleConnectPeripheral = (event: any) => {console.log(`[handleConnectPeripheral][${event.peripheral}] connected.`); };
-
-const handleUpdateValueForCharacteristic = (
-  data: BleManagerDidUpdateValueForCharacteristicEvent,
-) => {
-  console.log(
-    `[handleUpdateValueForCharacteristic] received data from '${data.peripheral}' with characteristic='${data.characteristic}' and value='${data.value}'`,
-  );
-};
+const handleUpdateValueForCharacteristic = (data: BleManagerDidUpdateValueForCharacteristicEvent) => {
+  console.log(`RXDATA : '${data.peripheral}' CHAR='${data.characteristic}' VAL='${data.value}'`);
+};*/
 ////////////////////////////////////////////////////
-////      LISTENER
+////      BLEMANAGE
 ////////////////////////////////////////////////////
 
-const startScan=()=>{if(!isScanning){clrDev();
-  //setPeripherals(new Map<Peripheral['id'], Peripheral>());
-  try {BleManager.scan(SERVICE_UUIDS, SECONDS_TO_SCAN_FOR, undefined, {matchMode: BleScanMatchMode.Sticky,scanMode: BleScanMode.LowLatency,callbackType: BleScanCallbackType.AllMatches }).then(()=>{setIsScanning(true);console.log('[startScan] scan promise returned successfully.'); }).catch((err: any)=>{
-  console.error('[startScan] ble scan returned in error', err); });console.log('[startScan] starting scan...'); } catch (error){console.error('[startScan] ble scan error thrown', error); } } }
+const startScan=()=>{if(!isScanning){clrDev();try {BleManager.scan(SERVICE_UUIDS, SCAN_INTERV, undefined, {matchMode: BleScanMatchMode.Sticky,scanMode: BleScanMode.LowLatency,callbackType: BleScanCallbackType.AllMatches }).then(()=>{setIsScanning(true);console.log('[BLEMANAGE] scan promise returned successfully.'); }).catch((err: any)=>{console.error('[BLEMANAGE]:error:',err); });console.log('[BLEMANAGE]:starting scan...'); }catch (error){console.error('[BLEMANAGE]:error:', error); } } }
 
-const stopScan=()=>{BleManager.stopScan().then(()=>{setIsScanning(false);console.log("Scan stopped"); }); };
+const stopScan=(call:any)=>{clrDev();BleManager.stopScan().then(()=>{setIsScanning(false);console.log("[BLEMANAGE]:Scan stopped");call(); }); };
 
-const connect=(a:string)=>{BleManager.connect(a).then(()=>{console.log("Connected"); }).catch((error)=>{console.log(error); }); };
+const connect=(a:string)=>{stopScan(()=>{console.log("[BLEMANAGE]:connecting");BleManager.connect(a).then(()=>{console.log("[BLEMANAGE]:Connected"); }).catch((error)=>{console.log("[BLEMANAGE]:error:",error); });}); };
 
+const disconnect=(a:string)=>{BleManager.disconnect(a).then(()=>{console.log("[BLEMANAGE]:Disconnected"); }).catch((error)=>{console.log("[BLEMANAGE]:error:",error); }); }
 
+const notify=(id:string)=>{BleManager.startNotification(id,uuids.service,uuids.rxtx).then(()=>{console.log("[BLEMANAGE]:BLE SUBSCRIBED"); }).catch((error)=>{console.log("[BLEMANAGE]:error:",error); }); }
 
-const notify=(id:string)=>{BleManager.startNotification(id,uuids.service,uuids.rxtx).then(() => {
-    // Success code
-    console.log("Notification started");
-  })
-  .catch((error) => {
-    // Failure code
-    console.log("NOTIF",error);
-  });
-}
+const sendData=(id:string,a:[])=>{BleManager.write(id,uuids.service,uuids.rxtx,a).then(()=>{console.log("[BLEMANAGE]:WRITE: ",a); }).catch((error) => {console.log(error); }); };
 
+const readData=(id:string)=>{BleManager.read(id,uuids.service,uuids.rxtx).then((d)=>{console.log(d); }).catch((error)=>{console.log("[BLEMANAGE]:error:"+error); }); };
 
-const sendData=(a:[])=>{BleManager.write(conDev.id,uuids.service,uuids.rxtx,a).then(() => {
-console.log("WRITE: "+[0x31] ); }).catch((error) => {console.log(error); }); };
+useEffect(()=>{try{BleManager.start({ showAlert: false }).then(()=>console.log('[BLEMANAGE]:BleManager started.')).catch((error: any) =>console.error('[BLEMANAGE]:error:', error) ); }catch(error){console.error('[BLEMANAGE]:error:', error);return; }
 
-const readData=()=>{BleManager.read(conDev.id,uuids.service,uuids.rxtx).then((d) => {
-  //let readedData = bytesToString(readData);
-console.log(d); }).catch((error) => {console.log(error); }); };
+////////////////////////////////////////////////////
+////      LISTENERS
+////////////////////////////////////////////////////
+const listeners=[
+bleManagerEmitter.addListener('BleManagerDiscoverPeripheral',
+(peripheral:Peripheral)=>{if(peripheral.advertising.isConnectable){let nme=peripheral.name||'NO NAME';let id=peripheral.id;addDev(peripheral);
+ } } ),
 
+bleManagerEmitter.addListener('BleManagerStopScan',()=>{setIsScanning(false);console.log('[LISTENERS]: scan is stopped.'); }),
 
-/*const readFromBle = (id: string) => {
-  BleManager.retrieveServices(id).then((response) => {readData();
-  })
-}*/
+bleManagerEmitter.addListener('BleManagerDisconnectPeripheral',
+(event: BleDisconnectPeripheralEvent)=>{console.log(`[LISTENERS]:[${event.peripheral}] disconnected.`);setDevName("UNCONNECTED");clrDev(); }),
 
-  const isDarkMode = useColorScheme() === 'dark';
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
+bleManagerEmitter.addListener('BleManagerDidUpdateValueForCharacteristic',(data:BleManagerDidUpdateValueForCharacteristicEvent)=>{
+  if(dataState==dTyp.height)setsensHeight(byte2string(data.value));
+  console.log(`[LISTENERS]:rxd='${data.peripheral}',CHAR='${data.characteristic}'VAL='${byte2string(data.value)}'`); } ),
 
+bleManagerEmitter.addListener('BleManagerConnectPeripheral',(event:any)=>{setDevName(event.peripheral);console.log(`[LISTENERS]:[${event.peripheral}] connected.`); } )
+];
+handleLocReq();
+
+return()=>{console.log('[LISTENERS]:main component unmounting. Removing listeners...');for(const listener of listeners){listener.remove(); } };
 
 
-
-  useEffect(() => {
-    try {
-      BleManager.start({ showAlert: false })
-        .then(() => console.log('BleManager started.'))
-        .catch((error: any) =>
-          console.error('BeManager could not be started.', error),
-        );
-    } catch (error) {
-      console.error('unexpected error starting BleManager.', error);
-      return;
-    }
-
-    const listeners = [
-      bleManagerEmitter.addListener(
-        'BleManagerDiscoverPeripheral',
-        handleDiscoverPeripheral,
-      ),
-      bleManagerEmitter.addListener('BleManagerStopScan', handleStopScan),
-      bleManagerEmitter.addListener(
-        'BleManagerDisconnectPeripheral',
-        handleDisconnectedPeripheral,
-      ),
-      bleManagerEmitter.addListener(
-        'BleManagerDidUpdateValueForCharacteristic',
-        handleUpdateValueForCharacteristic,
-      ),
-      bleManagerEmitter.addListener(
-        'BleManagerConnectPeripheral',
-        handleConnectPeripheral,
-      ),
-    ];
-
-    handleLocReq();
-
-    return () => {
-      console.log('[app] main component unmounting. Removing listeners...');
-      for (const listener of listeners) {
-        listener.remove();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+}, []);
 
 ////////////////////////////////////////////////////
 ////      RENDERS
 ////////////////////////////////////////////////////
 const styles_x = StyleSheet.create({
-  container: {
-  },
-  bigBlue: {
-    color: 'blue',
-    fontWeight: 'bold',
-    fontSize: 30,
-  },
-  txt:{color:"yellow" },
-  titleWrapper: {
-    color:"yellow" 
-  },
-  inputWrapper: {
-
-  },
-  contentContainer: {
-  },
-  footer: {
-  }
+  txt:{color:"yellow" }
 });
 
+
+const renderItem = ({item}: {item: Peripheral}) => {
+  const backgroundColor = item.connected ? '#069400' : Colors.orange;
+  return (
+    <TouchableHighlight
+      underlayColor="#0082FC"
+      onPress={() =>{console.log("[RENDER]:clicked:",item.id);connect(item.id)}}>
+      <View style={[{backgroundColor}]}>
+        <Text style={stylesDevItems.id}>
+          {item.name} {item?.advertising?.localName}{"\n"}
+          {item.id}
+        </Text>
+      </View>
+    </TouchableHighlight>
+  );
+};
 
 
   /////////#####################styles
-return (<SafeAreaView style={[backgroundStyle, styles.mainBody]}>
-  <View style={styles.containerMain}>
-     <Text style={styles_x.txt} onPress={(a)=>connect(conDev.id)}>CONNECT</Text>
-     <Text style={styles_x.txt}></Text>
-     <Text style={styles_x.txt} onPress={(a)=>notify(conDev.id)}>NOTIFY</Text>
-     <Text style={styles_x.txt}></Text>
-     <Text style={styles_x.txt} onPress={(a)=>{sendData([0x31]); } }>SENDDATA</Text>
-    
-     <FlatList style={styles.txt}
+return (<SafeAreaView style={[backgroundStyle, stylesGlob.mainBody]}>
 
-data={devices}
 
-renderItem={({item}) => (
+  
+  <StatusBar barStyle={'light-content'} backgroundColor={Colors.black} />
 
-    <TouchableWithoutFeedback onPress={ () => console.log(item)}>
-
-        <View>
-           <Text>ID: {item.id}</Text>
-           <Text>Title: {item.name}</Text>
-        </View>
-
-   </TouchableWithoutFeedback>
-
-)}
-/> 
-      <ScrollView>
-    
-      </ScrollView>
-<View style={styles.bottomView}><FloatingAction onPressItem={name => {hellod(name+""); }} onOpen={startScan} onClose={stopScan}/></View>
+  <View style={stylesACtPanel.panel}>
+    <Text style={stylesConnPanel.dev}>React-Native-Ble</Text>
+    <Icon.Button style={stylesConnPanel.ico} name="sync" onPress={startScan} />
   </View>
-<StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={backgroundStyle.backgroundColor} /></SafeAreaView>
+  <View style={stylesConnPanel.panel}>
+    <Text style={stylesConnPanel.dev}>{deviceName}</Text>
+    <CButton onPress={()=>{disconnect(deviceName); }} text="DIS" style={stylesConnPanel.button}/>
+    <CButton onPress={()=>{notify(deviceName); }} text="NFY" style={stylesConnPanel.button}/>
+  </View>
+
+
+  <View style={[stylesGlob.containerMain,{marginTop:20}]}>
+
+  <View style={stylesRxTxPan.panel}>
+    <Text style={stylesRxTxPan.label}>HEIGHT : </Text>
+    <Text style={stylesRxTxPan.vals}>{sensHeight}</Text>
+    <CButton onPress={()=>{dataState=dTyp.height;sendData(deviceName,[dataState]); }} text="READ" style={stylesRxTxPan.button}/>
+  </View>
+{/*
+  <View style={stylesRxTxPan.panel}>
+    <Text style={stylesRxTxPan.label}>HEIGHT : </Text>
+    <TextInput style={stylesRxTxPan.invals} />
+    <CButton onPress={()=>{dataState=dTyp.cust;
+    console.log("NAME",this.refs.username.value);
+    //sendData(deviceName,[string2byte(value)]);
+     }} text="READ" style={stylesRxTxPan.button}
+    />
+    </View>*/}
+    
+     <FlatList
+          data={Array.from(peripherals.values())}
+          contentContainerStyle={{rowGap: 12}}
+          renderItem={renderItem}
+          keyExtractor={item => item.id}
+        />
+        
+  </View>
+</SafeAreaView>
   );
 };
-const windowHeight = Dimensions.get('window').height;
-const styles = StyleSheet.create({
-  mainBody: {
-    flex: 1,
-    justifyContent: 'center',
-    height: windowHeight,
-  },
-  buttonStyle: {
-    backgroundColor: '#307ecc',
-    borderWidth: 0,
-    color: '#FFFFFF',
-    borderColor: '#307ecc',
-    height: 40,
-    alignItems: 'center',
-    borderRadius: 30,
-    marginLeft: 35,
-    marginRight: 35,
-    marginTop: 15,
-  },
-  buttonTextStyle: {
-    color: '#FFFFFF',
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  containerMain: {
-    flex: 1,
-  },
-  bottomView: {
-    width: '100%',
-    height: 100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'absolute', //Here is the trick
-    bottom: 0, //Here is the trick
-  },
-  textStyle: {
-    color: '#fff',
-    fontSize: 18,
-  }
-});
+
 export default App;
